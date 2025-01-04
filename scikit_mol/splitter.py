@@ -2,7 +2,8 @@
 Contributed by: Ruel Cedeno, @cedenoruel
 """
 
-import rdkit.Chem as Chem
+from rdkit import Chem
+from rdkit.Chem.Scaffolds import MurckoScaffold
 from sklearn.model_selection import StratifiedGroupKFold, BaseCrossValidator, GroupShuffleSplit
 import numpy as np
 import pandas as pd
@@ -13,7 +14,7 @@ def get_scaffold(smiles: str)-> str:
     """
     If no scaffold (e.g. linear molecule), return the original smiles
     """
-    scaffold =  Chem.Scaffolds.MurckoScaffold.MurckoScaffoldSmilesFromSmiles(smiles,includeChirality=True)
+    scaffold =  MurckoScaffold.MurckoScaffoldSmilesFromSmiles(smiles,includeChirality=True)
     return scaffold if len(scaffold) != 0 else smiles 
 
 
