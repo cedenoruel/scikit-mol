@@ -110,7 +110,9 @@ def train_test_group_split(X, y,groups,test_size=0.2, random_state=42):
     y <- array/list of numerical value or boolean  
 
     Example:
-    X_train, X_test, y_train, y_test = scaffold_split_idx( X = data.SMILES, y = data.pXC50)
+    
+    data["scaffold_ID"] = get_scaffold_groups(data.SMILES)
+    X_train, X_test, y_train, y_test = train_test_group_split( X = data.SMILES, y = data.pXC50, groups = data.scaffold_ID, test_size=0.2)
 
     """
 
