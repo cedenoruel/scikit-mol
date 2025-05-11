@@ -1,16 +1,16 @@
-from typing import Union
-
-import numpy as np
-
+from typing import Optional
 from warnings import warn
 
-from .baseclasses import FpsTransformer
-
+import numpy as np
 from rdkit.Chem import rdMHFPFingerprint
+
+from .baseclasses import FpsTransformer
 
 
 # TODO move to use FpsGeneratorTransformer
 class MHFingerprintTransformer(FpsTransformer):
+    "Transforms the RDKit mol into the [MinHash fingerprint (MHFP)](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-018-0321-8)."
+
     def __init__(
         self,
         radius: int = 3,
@@ -20,26 +20,37 @@ class MHFingerprintTransformer(FpsTransformer):
         min_radius: int = 1,
         fpSize: int = 2048,
         seed: int = 42,
-        parallel: Union[bool, int] = False,
+        n_jobs: Optional[int] = None,
         safe_inference_mode: bool = False,
         dtype: np.dtype = np.int32,
     ):
-        """Transforms the RDKit mol into the MinHash fingerprint (MHFP)
-
-        https://jcheminf.biomedcentral.com/articles/10.1186/s13321-018-0321-8
-
-        Args:
-            radius (int, optional): The MHFP radius. Defaults to 3.
-            rings (bool, optional): Whether or not to include rings in the shingling. Defaults to True.
-            isomeric (bool, optional): Whether the isomeric SMILES to be considered. Defaults to False.
-            kekulize (bool, optional): Whether or not to kekulize the extracted SMILES. Defaults to False.
-            min_radius (int, optional): The minimum radius that is used to extract n-gram. Defaults to 1.
-            fpSize (int, optional): The number of permutations used for hashing. Defaults to 2048,
-            this is effectively the length of the FP
-            seed (int, optional): The value used to seed numpy.random. Defaults to 0.
+        """
+        Parameters
+        ----------
+        radius : int, optional
+            The MHFP radius.
+        rings : bool, optional
+            Whether to include rings in the shingling.
+        isomeric : bool, optional
+            Whether the isomeric SMILES to be considered
+        kekulize : bool, optional
+            Whether to kekulize the extracted SMILES
+        min_radius : int, optional
+            The minimum radius that is used to extract n-gram.
+        fpSize : int, optional
+            The number of permutations used for hashing. Defaults to `2048`, this is effectively the length of the FP.
+        seed : int, optional
+            The value used to seed numpy.random.
+        n_jobs : int or None, optional
+            The maximum number of concurrently running jobs.
+            `None` is a marker for 'unset' that will be interpreted as `n_jobs=1` unless the call is performed under a `parallel_config()` context manager that sets another value for `n_jobs`.
+        safe_inference_mode : bool, optional
+            Whether to use safe inference mode.
+        dtype : numpy.dtype, optional
+            The data type of the fingerprint. Defaults to `numpy.int32`.
         """
         super().__init__(
-            parallel=parallel, safe_inference_mode=safe_inference_mode, dtype=dtype
+            n_jobs=n_jobs, safe_inference_mode=safe_inference_mode, dtype=dtype
         )
         self.radius = radius
         self.rings = rings
@@ -121,7 +132,7 @@ class SECFingerprintTransformer(FpsTransformer):
         fpSize: int = 2048,
         n_permutations: int = 0,
         seed: int = 0,
-        parallel: Union[bool, int] = False,
+        n_jobs: Optional[int] = None,
         safe_inference_mode: bool = False,
         dtype: np.dtype = np.int8,
     ):
@@ -129,16 +140,16 @@ class SECFingerprintTransformer(FpsTransformer):
 
         Args:
             radius (int, optional): The MHFP radius. Defaults to 3.
-            rings (bool, optional): Whether or not to include rings in the shingling. Defaults to True.
+            rings (bool, optional): Whether to include rings in the shingling. Defaults to True.
             isomeric (bool, optional): Whether the isomeric SMILES to be considered. Defaults to False.
-            kekulize (bool, optional): Whether or not to kekulize the extracted SMILES. Defaults to False.
+            kekulize (bool, optional): Whether to kekulize the extracted SMILES. Defaults to False.
             min_radius (int, optional): The minimum radius that is used to extract n-gram. Defaults to 1.
             fpSize (int, optional): The length of the folded fingerprint. Defaults to 2048.
             n_permutations (int, optional): The number of permutations used for hashing. Defaults to 0.
             seed (int, optional): The value used to seed numpy.random. Defaults to 0.
         """
         super().__init__(
-            parallel=parallel, safe_inference_mode=safe_inference_mode, dtype=dtype
+            n_jobs=n_jobs, safe_inference_mode=safe_inference_mode, dtype=dtype
         )
         self.radius = radius
         self.rings = rings
@@ -188,7 +199,7 @@ class SECFingerprintTransformer(FpsTransformer):
     @seed.setter
     def seed(self, seed):
         self._seed = seed
-        # each time the seed parameter is modified refresh an instace of the encoder
+        # each time the seed parameter is modified refresh an instance of the encoder
         self._recreate_encoder()
 
     @property
@@ -198,7 +209,7 @@ class SECFingerprintTransformer(FpsTransformer):
     @n_permutations.setter
     def n_permutations(self, n_permutations):
         self._n_permutations = n_permutations
-        # each time the n_permutations parameter is modified refresh an instace of the encoder
+        # each time the n_permutations parameter is modified refresh an instance of the encoder
         self._recreate_encoder()
 
     @property

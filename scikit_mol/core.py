@@ -5,11 +5,10 @@ Users of scikit-mol should not need to use this module directly.
 Users who want to create their own transformers should use this module.
 """
 
-from dataclasses import dataclass
 import functools
+from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
 from packaging.version import Version
 
 SKLEARN_VERSION_PANDAS_OUT = Version("1.2")
@@ -17,11 +16,26 @@ SKLEARN_VERSION_PANDAS_OUT = Version("1.2")
 DEFAULT_MOL_COLUMN_NAME = "ROMol"
 
 
+class NoFitNeededMixin:
+    """
+    Mixin class to add a `__sklearn_is_fitted__` method to a transformer, which does not need to be fitted.
+    """
+
+    def __sklearn_is_fitted__(self):
+        return True
+
+
 @dataclass
 class InvalidMol:
-    """
-    Represents molecules which raised an error during a pipeline step.
-    Evaluates to False in boolean contexts.
+    """Represents molecules which raised an error during a pipeline step.
+    Evaluates to `False` in boolean contexts.
+
+    Parameters
+    -----------
+    pipeline_step : str
+        The name of the pipeline step where the error occurred.
+    error : str
+        The error message.
     """
 
     pipeline_step: str

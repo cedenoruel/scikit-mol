@@ -1,14 +1,9 @@
-from typing import Union
+from typing import Optional
 
 import numpy as np
-
-from warnings import warn
-
-from .baseclasses import FpsTransformer, FpsGeneratorTransformer
-
 from rdkit.Chem.rdFingerprintGenerator import GetRDKitFPGenerator
 
-from rdkit.Chem import rdFingerprintGenerator
+from .baseclasses import FpsGeneratorTransformer
 
 
 class RDKitFingerprintTransformer(FpsGeneratorTransformer):
@@ -36,7 +31,7 @@ class RDKitFingerprintTransformer(FpsGeneratorTransformer):
         fpSize: int = 2048,
         numBitsPerFeature: int = 2,
         useCounts: bool = False,
-        parallel: Union[bool, int] = False,
+        n_jobs: Optional[int] = None,
         safe_inference_mode: bool = False,
     ):
         """Calculates the RDKit fingerprints
@@ -61,9 +56,15 @@ class RDKitFingerprintTransformer(FpsGeneratorTransformer):
             size of the generated fingerprint, does not affect the sparse versions, by default 2048
         numBitsPerFeature : int, optional
             the number of bits set per path/subgraph found, by default 2
+        n_jobs : int, optional default=None
+            The maximum number of concurrently running jobs.
+            None is a marker for 'unset' that will be interpreted as `n_jobs=1` unless the call is performed under a `joblib.parallel_config()` context manager that sets another value for `n_jobs`.
+        safe_inference_mode : bool, optional
+            If `True`, will return masked arrays for invalid mols, by default `False`
+
         """
         self._initializing = True
-        super().__init__(parallel=parallel, safe_inference_mode=safe_inference_mode)
+        super().__init__(n_jobs=n_jobs, safe_inference_mode=safe_inference_mode)
         self.minPath = minPath
         self.maxPath = maxPath
         self.useHs = useHs

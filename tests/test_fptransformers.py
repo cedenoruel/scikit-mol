@@ -1,27 +1,29 @@
 import pickle
 import tempfile
-import pytest
+
 import numpy as np
 import pandas as pd
+import pytest
 from rdkit import Chem
-from fixtures import (
-    mols_list,
-    smiles_list,
-    mols_container,
-    smiles_container,
-    fingerprint,
-    chiral_smiles_list,
-    chiral_mols_list,
-    mols_with_invalid_container,
-    smiles_list_with_invalid,
-)
 from sklearn import clone
 
 from scikit_mol.fingerprints import (
-    MACCSKeysFingerprintTransformer,
-    SECFingerprintTransformer,
-    MHFingerprintTransformer,
     AvalonFingerprintTransformer,
+    MACCSKeysFingerprintTransformer,
+    MHFingerprintTransformer,
+    SECFingerprintTransformer,
+)
+
+from .fixtures import (
+    chiral_mols_list,
+    chiral_smiles_list,
+    fingerprint,
+    mols_container,
+    mols_list,
+    mols_with_invalid_container,
+    smiles_container,
+    smiles_list,
+    smiles_list_with_invalid,
 )
 
 
@@ -129,7 +131,7 @@ def test_transform_parallel(
         mhfp_transformer,
         avalon_transformer,
     ]:
-        t.set_params(parallel=True)
+        t.set_params(n_jobs=2)
         params = t.get_params()
         fps = t.transform(mols_container)
         # Assert that the same length of input and output
@@ -291,7 +293,7 @@ def test_transform_parallel_with_safe_inference_mode(
         secfp_transformer,
         avalon_transformer,
     ]:
-        t.set_params(safe_inference_mode=True, parallel=True)
+        t.set_params(safe_inference_mode=True, n_jobs=2)
         fps = t.transform(mols_with_invalid_container)
 
         assert len(fps) == len(mols_with_invalid_container)

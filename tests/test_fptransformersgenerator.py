@@ -1,16 +1,8 @@
 import pickle
 import tempfile
-import pytest
+
 import numpy as np
-from fixtures import (
-    mols_list,
-    smiles_list,
-    mols_container,
-    smiles_container,
-    fingerprint,
-    chiral_smiles_list,
-    chiral_mols_list,
-)
+import pytest
 from sklearn import clone
 
 from scikit_mol.fingerprints import (
@@ -18,6 +10,16 @@ from scikit_mol.fingerprints import (
     MorganFingerprintTransformer,
     RDKitFingerprintTransformer,
     TopologicalTorsionFingerprintTransformer,
+)
+
+from .fixtures import (
+    chiral_mols_list,
+    chiral_smiles_list,
+    fingerprint,
+    mols_container,
+    mols_list,
+    smiles_container,
+    smiles_list,
 )
 
 test_transformers = [
@@ -93,7 +95,7 @@ def test_transform(mols_container, transformer_class):
 def test_transform_parallel(mols_container, transformer_class):
     transformer = transformer_class()
     # Test the different transformers
-    transformer.set_params(parallel=True)
+    transformer.set_params(n_jobs=2)
     params = transformer.get_params()
     fps = transformer.transform(mols_container)
     # Assert that the same length of input and output
@@ -193,7 +195,7 @@ def test_topologicaltorsion_set_params(chiral_mols_list):
     new_params = {  #'atomInvariants': 0,
         #'fromAtoms': 0,
         #'ignoreAtoms': 0,
-        #'includeChirality': True, #TODO, figure out why this setting seems to give same FP wheter toggled or not
+        #'includeChirality': True, #TODO, figure out why this setting seems to give same FP whether toggled or not
         "fpSize": 1024,
         #'nBitsPerEntry': 3, #Todo: not setable with the generators?
         "targetSize": 5,

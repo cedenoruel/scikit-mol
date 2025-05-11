@@ -1,15 +1,15 @@
 # For a non-scikit-learn check smiles sanitizer class
 
-import pandas as pd
-from rdkit import Chem
-
-from sklearn.base import BaseEstimator
-from sklearn.pipeline import Pipeline, FeatureUnion
-from sklearn.compose import ColumnTransformer
 import warnings
 
+import pandas as pd
+from rdkit import Chem
+from sklearn.base import BaseEstimator
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import FeatureUnion, Pipeline
 
-class CheckSmilesSanitazion:
+
+class CheckSmilesSanitization:
     def __init__(self, return_mol=False):
         self.return_mol = return_mol
         self.errors = pd.DataFrame()
@@ -65,13 +65,27 @@ class CheckSmilesSanitazion:
 
             return X_out, X_errors
 
-
-def set_safe_inference_mode(estimator, value):
     """
-    Recursively set the safe_inference_mode parameter for all compatible estimators.
+    R
 
     :param estimator: A scikit-learn estimator, pipeline, or custom wrapper
     :param value: Boolean value to set for safe_inference_mode
+    """
+
+
+def set_safe_inference_mode(estimator: BaseEstimator, value: bool) -> BaseEstimator:
+    """Recursively set the safe_inference_mode parameter for all compatible estimators.
+
+    Parameters
+    ----------
+    estimator :
+         A scikit-learn estimator, pipeline, or custom wrapper
+    value :
+        Boolean value to set for safe_inference_mode
+    Returns
+    -------
+    BaseEstimator
+        The estimator with the `safe_inference_mode` parameter set to the specified value
     """
 
     def _set_safe_inference_mode_recursive(est, val):
@@ -100,7 +114,7 @@ def set_safe_inference_mode(estimator, value):
         # Handle other estimators with get_params
         elif isinstance(est, BaseEstimator):
             params = est.get_params(deep=False)
-            for param_name, param_value in params.items():
+            for _, param_value in params.items():
                 if isinstance(param_value, BaseEstimator):
                     _set_safe_inference_mode_recursive(param_value, val)
 

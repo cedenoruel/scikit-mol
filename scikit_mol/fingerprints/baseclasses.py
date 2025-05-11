@@ -1,35 +1,18 @@
-from multiprocessing import Pool, get_context
-import multiprocessing
-import re
+import functools
 import inspect
-from warnings import warn, simplefilter
-
-from typing import Union
-from rdkit import DataStructs
+import re
+from abc import ABC, abstractmethod
+from typing import Optional, Type
+from warnings import simplefilter, warn
 
 # from rdkit.Chem.AllChem import GetMorganFingerprintAsBitVect
-from rdkit.Chem import rdMolDescriptors
-from rdkit.Chem import rdFingerprintGenerator
-from rdkit.Chem import rdMHFPFingerprint
-
-
-from rdkit.Chem.rdFingerprintGenerator import (
-    GetMorganGenerator,
-    GetMorganFeatureAtomInvGen,
-    GetTopologicalTorsionGenerator,
-    GetAtomPairGenerator,
-    GetRDKitFPGenerator,
-)
-
 import numpy as np
-import pandas as pd
+from rdkit import DataStructs
 from scipy.sparse import lil_matrix
-from scipy.sparse import vstack
-
 from sklearn.base import BaseEstimator, TransformerMixin
-from scikit_mol.core import check_transform_input
 
-from abc import ABC, abstractmethod
+from scikit_mol.core import NoFitNeededMixin, check_transform_input
+from scikit_mol.parallel import parallelized_with_batches
 
 simplefilter("always", DeprecationWarning)
 
@@ -38,16 +21,30 @@ _PATTERN_FINGERPRINT_TRANSFORMER = re.compile(
 )
 
 
-class BaseFpsTransformer(ABC, BaseEstimator, TransformerMixin):
+class BaseFpsTransformer(TransformerMixin, NoFitNeededMixin, ABC, BaseEstimator):
+    """Base class for fingerprint transformers
+
+    Parameters
+    ----------
+    name : Optional[str], optional
+        name of the fingerprint, used for column prefix in when the output mode is set to `pandas`, by default None
+    n_jobs : Optional[str], optional
+        The maximum number of concurrently running jobs.
+        None is a marker for 'unset' that will be interpreted as `n_jobs=1` unless the call is performed under a `parallel_config()` context manager that sets another value for `n_jobs`.
+    safe_inference_mode : bool
+        If `True`, enables safeguards for handling invalid data during inference.
+        This should only be set to `True` when deploying models to production.
+    """
+
     def __init__(
         self,
-        parallel: Union[bool, int] = False,
-        start_method: str = None,
+        name: Optional[str] = None,
+        n_jobs: Optional[int] = None,
         safe_inference_mode: bool = False,
     ):
-        self.parallel = parallel
-        self.start_method = start_method
+        self.n_jobs = n_jobs
         self.safe_inference_mode = safe_inference_mode
+        self._fp_name = name
 
     # TODO, remove when finally deprecating nBits and dtype
     @property
@@ -71,12 +68,15 @@ class BaseFpsTransformer(ABC, BaseEstimator, TransformerMixin):
             self.fpSize = nBits
 
     def _get_column_prefix(self) -> str:
-        matched = _PATTERN_FINGERPRINT_TRANSFORMER.match(type(self).__name__)
+        if hasattr(self, "_fp_name") and self._fp_name:
+            return str(self._fp_name).lower()
+        cls_name = type(self).__name__
+        matched = _PATTERN_FINGERPRINT_TRANSFORMER.match(cls_name)
         if matched:
             fingerprint_name = matched.group("fingerprint_name")
             return f"fp_{fingerprint_name.lower()}"
         else:
-            return "fp"
+            return cls_name.lower()
 
     def _get_n_digits_column_suffix(self) -> int:
         return len(str(self.fpSize))
@@ -160,39 +160,17 @@ class BaseFpsTransformer(ABC, BaseEstimator, TransformerMixin):
         np.array
             Fingerprints, shape (samples, fingerprint size)
         """
-        if not self.parallel:
-            return self._transform(X)
-
-        elif self.parallel:
-            n_processes = (
-                self.parallel if self.parallel > 1 else None
-            )  # Pool(processes=None) autodetects
-            n_chunks = (
-                n_processes if n_processes is not None else multiprocessing.cpu_count()
-            )
-
-            if len((X)) < n_chunks:
-                n_chunks = len(X)
-            with get_context(self.start_method).Pool(processes=n_processes) as pool:
-                x_chunks = np.array_split(X, n_chunks)
-                # TODO check what is fastest, pickle or recreate and do this only for classes that need this
-                # arrays = pool.map(self._transform, x_chunks)
-                parameters = self.get_params()
-                # TODO: create "transform_parallel" function in the core module,
-                # and use it here and in the descriptors transformer
-                # x_chunks = [np.array(x).reshape(-1, 1) for x in x_chunks]
-                arrays = pool.map(
-                    parallel_helper,
-                    [
-                        (self.__class__.__name__, parameters, x_chunk)
-                        for x_chunk in x_chunks
-                    ],
-                )
-                if self.safe_inference_mode:
-                    arr = np.ma.concatenate(arrays)
-                else:
-                    arr = np.concatenate(arrays)
+        func = functools.partial(
+            parallel_helper,
+            cls=self.__class__,
+            parameters=self.get_params(),
+        )
+        arrays = parallelized_with_batches(func, X, self.n_jobs)
+        if self.safe_inference_mode:
+            arr = np.ma.concatenate(arrays)
             return arr
+        else:
+            return np.concatenate(arrays)
 
 
 class FpsTransformer(BaseFpsTransformer):
@@ -200,11 +178,11 @@ class FpsTransformer(BaseFpsTransformer):
 
     def __init__(
         self,
-        parallel: Union[bool, int] = False,
+        n_jobs: Optional[int] = None,
         safe_inference_mode: bool = False,
         dtype: np.dtype = np.int8,
     ):
-        super().__init__(parallel=parallel, safe_inference_mode=safe_inference_mode)
+        super().__init__(n_jobs=n_jobs, safe_inference_mode=safe_inference_mode)
         self.dtype = dtype
 
     def _transform_mol(self, mol):
@@ -265,10 +243,11 @@ class FpsGeneratorTransformer(BaseFpsTransformer):
         # Restore the state of the parent class
         super().__setstate__(state)
         # Re-create the unpicklable property
+        # Do we need this part of code? params variable is not used and tests pass without it
         generatort_keys = inspect.signature(
             self._generate_fp_generator
         ).parameters.keys()
-        params = [
+        params = [  # noqa: F841
             setattr(self, k, state["_" + k])
             if "_" + k in state
             else setattr(self, k, state[k])
@@ -327,12 +306,11 @@ class FpsGeneratorTransformer(BaseFpsTransformer):
         return [p for p in params if p not in ("dtype", "nBits")]
 
 
-def parallel_helper(args):
-    """Parallel_helper takes a tuple with classname, the objects parameters and the mols to process.
+def parallel_helper(X_mols, cls: Type[BaseFpsTransformer], parameters: dict):
+    """Parallel_helper takes a tuple with class, the objects parameters and the mols to process.
     Then instantiates the class with the parameters and processes the mol.
-    Intention is to be able to do this in child processes as some classes can't be pickled"""
-    classname, parameters, X_mols = args
-    from scikit_mol import fingerprints
-
-    transformer = getattr(fingerprints, classname)(**parameters)
+    Intention is to be able to do this in child processes as some classes can't be pickled.
+    This is a workaround for the fact that joblib doesn't support initialiers like multiprocessing does.
+    """
+    transformer = cls(**parameters)
     return transformer._transform(X_mols)

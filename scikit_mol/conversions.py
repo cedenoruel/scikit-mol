@@ -1,44 +1,52 @@
-from multiprocessing import get_context
-import multiprocessing
-from typing import Union
-from rdkit import Chem
-from rdkit.rdBase import BlockLogs
+from collections.abc import Sequence
+from typing import Optional, Union
 
 import numpy as np
+from numpy.typing import NDArray
+from rdkit import Chem
+from rdkit.rdBase import BlockLogs
 from sklearn.base import BaseEstimator, TransformerMixin
 
+from scikit_mol._constants import DOCS_BASE_URL
 from scikit_mol.core import (
+    InvalidMol,
+    NoFitNeededMixin,
     check_transform_input,
     feature_names_default_mol,
-    DEFAULT_MOL_COLUMN_NAME,
-    InvalidMol,
 )
+from scikit_mol.parallel import parallelized_with_batches
 
 # from scikit_mol._invalid import InvalidMol
 
 
-class SmilesToMolTransformer(BaseEstimator, TransformerMixin):
+class SmilesToMolTransformer(TransformerMixin, NoFitNeededMixin, BaseEstimator):
     """
     Transformer for converting SMILES strings to RDKit mol objects.
 
     This transformer can be included in pipelines during development and training,
     but the safe inference mode should only be enabled when deploying models for
     inference in production environments.
-
-    Parameters:
-    -----------
-    parallel : Union[bool, int], default=False
-        If True or int > 1, enables parallel processing.
-    safe_inference_mode : bool, default=False
-        If True, enables safeguards for handling invalid data during inference.
-        This should only be set to True when deploying models to production.
     """
 
+    _doc_link_module = "scikit_mol"
+    _doc_link_template = (
+        DOCS_BASE_URL + "{estimator_module}/#{estimator_module}.{estimator_name}"
+    )
+
     def __init__(
-        self, parallel: Union[bool, int] = False, safe_inference_mode: bool = False
+        self, n_jobs: Optional[None] = None, safe_inference_mode: bool = False
     ):
-        self.parallel = parallel
-        self.start_method = None  # TODO implement handling of start_method
+        """
+        Parameters
+        -----------
+        n_jobs : int, optional default=None
+            The maximum number of concurrently running jobs.
+            `None` is a marker for 'unset' that will be interpreted as `n_jobs=1` unless the call is performed under a `parallel_config()` context manager that sets another value for `n_jobs`.
+        safe_inference_mode : bool, default=False
+            If `True`, enables safeguards for handling invalid data during inference.
+            This should only be set to `True` when deploying models to production.
+        """
+        self.n_jobs = n_jobs
         self.safe_inference_mode = safe_inference_mode
 
     @feature_names_default_mol
@@ -49,43 +57,29 @@ class SmilesToMolTransformer(BaseEstimator, TransformerMixin):
         """Included for scikit-learn compatibility, does nothing"""
         return self
 
-    def transform(self, X_smiles_list, y=None):
+    def transform(
+        self, X_smiles_list: Sequence[str], y=None
+    ) -> NDArray[Union[Chem.Mol, InvalidMol]]:
         """Converts SMILES into RDKit mols
 
         Parameters
         ----------
-        X_smiles_list : list-like
-            A list of RDKit parsable strings
+        X_smiles_list : Sequence[str]
+            sequence of SMILES strings to transform
 
         Returns
         -------
-        List
-            List of RDKit mol objects
-
+        NDArray[Union[Chem.Mol, InvalidMol]]
+            Array of RDKit mol objects or InvalidMol objects if a SMILES string is invalid and `safe_inference_mode=True`
         Raises
         ------
         ValueError
-            Raises ValueError if a SMILES string is unparsable by RDKit and safe_inference_mode is False
+            Raises ValueError if a SMILES string is unparsable by RDKit and `safe_inference_mode=False`
         """
 
-        if not self.parallel:
-            return self._transform(X_smiles_list)
-        elif self.parallel:
-            n_processes = (
-                self.parallel if self.parallel > 1 else None
-            )  # Pool(processes=None) autodetects
-            n_chunks = (
-                n_processes * 2
-                if n_processes is not None
-                else multiprocessing.cpu_count() * 2
-            )  # TODO, tune the number of chunks per child process
-            with get_context(self.start_method).Pool(processes=n_processes) as pool:
-                x_chunks = np.array_split(X_smiles_list, n_chunks)
-                arrays = pool.map(
-                    self._transform, x_chunks
-                )  # is the helper function a safer way of handling the picklind and child process communication
-                arr = np.concatenate(arrays)
-                return arr
+        arrays = parallelized_with_batches(self._transform, X_smiles_list, self.n_jobs)
+        arr = np.concatenate(arrays)
+        return arr
 
     @check_transform_input
     def _transform(self, X):
@@ -123,9 +117,7 @@ class SmilesToMolTransformer(BaseEstimator, TransformerMixin):
                     X_out.append(smiles)
                 except Exception as e:
                     X_out.append(
-                        InvalidMol(
-                            str(self), f"Error converting Mol to SMILES: {str(e)}"
-                        )
+                        InvalidMol(str(self), f"Error converting Mol to SMILES: {e}")
                     )
             else:
                 X_out.append(InvalidMol(str(self), f"Not a Mol: {mol}"))
